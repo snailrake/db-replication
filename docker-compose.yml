@@ -1,0 +1,73 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: postgres_source
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-shop}
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secret}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin} -d ${POSTGRES_DB:-shop}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  mongo:
+    image: mongo:7
+    container_name: mongo_replica
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: replication_worker
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-shop}
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secret}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      MONGO_INITDB_DATABASE: ${MONGO_INITDB_DATABASE:-replica}
+      MONGO_HOST: mongo
+      MONGO_PORT: 27017
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      WORKER_MODE: ${WORKER_MODE:-cron}
+      SYNC_ON_START: ${SYNC_ON_START:-true}
+      BATCH_SIZE: ${BATCH_SIZE:-1000}
+      SYNC_INTERVAL_SECONDS: ${SYNC_INTERVAL_SECONDS:-60}
+      SYNC_CRON: ${SYNC_CRON:-*/2 * * * *}
+      SYNC_JOB_ID: ${SYNC_JOB_ID:-postgres_to_mongo}
+      STATE_BACKEND: ${STATE_BACKEND:-mongo}
+      STATE_COLLECTION: ${STATE_COLLECTION:-sync_state}
+      CUSTOMERS_COLLECTION: ${CUSTOMERS_COLLECTION:-customers}
+      SEED_CUSTOMERS: ${SEED_CUSTOMERS:-100000}
+      SEED_PRODUCTS: ${SEED_PRODUCTS:-500}
+      SEED_ORDERS: ${SEED_ORDERS:-500000}
+      SEED_BATCH_SIZE: ${SEED_BATCH_SIZE:-5000}
+      SEED_MAX_PRODUCTS_PER_ORDER: ${SEED_MAX_PRODUCTS_PER_ORDER:-3}
+      SEED_SOFT_DELETE_RATIO: ${SEED_SOFT_DELETE_RATIO:-0.01}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+    command: ["python", "-m", "replicator.main"]
+
+volumes:
+  postgres_data:
+  mongo_data:
