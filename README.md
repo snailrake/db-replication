@@ -166,7 +166,7 @@ SYNC_CRON=*/2 * * * *
 Для проверки есть команда:
 
 ```powershell
-docker compose run --rm worker python -m replicator.verify_replication
+docker compose run --rm worker python -m replicator.main verify
 ```
 
 Она показывает:
@@ -243,5 +243,5 @@ docker compose run --rm worker python -m replicator.generate_data
 Проверка:
 
 ```powershell
-docker compose run --rm worker python -m replicator.verify_replication
+docker compose run --rm worker python -m replicator.main verify
 ```
